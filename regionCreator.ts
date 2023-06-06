@@ -2,9 +2,9 @@ class RegionCreator {
 
     // TODO - make it work with custom inputs (so far works only with rectangular sudoku inputs)
 
-    private width: number;
-    private height: number;
-    private totalCellCount: number;
+    private readonly width: number;
+    private readonly height: number;
+    private readonly totalCellCount: number;
     private cellCount: number;
 
     public forcedRegions: number[];  // zeros are blank spaces (easier to write than -1), other numbers are region numbers
@@ -26,10 +26,10 @@ class RegionCreator {
 
     private strictness: number = 0;  // how much do the random sizes not deviate from width and/or height - 0(max) to 1(min deviation)
     private smallerRegionChance: number = 0.5;  // desired percentage of regions smaller than the avgRegionSize, must be between 0 and 1
-    private includeAvgRegionSize: boolean = true;  // if true, then avgRegionSize must not be equal to min and max RegionSize
-    private avgRegionSize: number = 1;  // must be integer between 1 and width * height (including) and must be between min and max RegionSize
-    private minRegionSize: number = 1;  // must be integer between 1 and width * height (including) and must be smaller or equal to maxRegionSize
-    private maxRegionSize: number = 1;  // must be integer between 1 and width * height (including) and must be bigger or equal to minRegionSize
+    private includeAvgRegionSize: boolean = true;  // if false, then avgRegionSize must not be equal to min and max RegionSize
+    private avgRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be between min and max RegionSize
+    private minRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be smaller or equal to maxRegionSize
+    private maxRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be bigger or equal to minRegionSize
 
     // variables to help with the generation
     private doFinish: boolean = false;
@@ -47,22 +47,22 @@ class RegionCreator {
         this.width = width;
         this.height = height;
         this.totalCellCount = this.width * this.height;
-        this.forcedRegions = ArrayUtils.createArray1d(this.totalCellCount, -1);
+        this.forcedRegions = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
         this.forcedRegionsCount = 0;
         this.forcedCellCount = 0;
         this.cellCount = this.totalCellCount - this.forcedCellCount;
         this.baseNeighbors = RegionCreator.getBaseNeighbors(this.width, this.height, this.forcedRegions);
-        this.baseRegionForCell = ArrayUtils.createArray1d(this.totalCellCount, -1);
-        this.baseFieldForCell = ArrayUtils.createArray1d(this.totalCellCount, 0);  // all cells are at the start in the field 0
-        this.baseCellsForFields = [RegionCreator.utilsArrayCreateIncremented(0, this.totalCellCount)];
+        this.baseRegionForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
+        this.baseFieldForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, 0);  // all cells are at the start in the field 0
+        this.baseCellsForFields = [RegionCreatorUtils.arrayCreateIncremented(0, this.totalCellCount)];
     }
 
     private setBaseRegionSizes(): void {
         let tryAgain = true;
         while (tryAgain) {
             tryAgain = false;
-            this.baseRegionSizes = ArrayUtils.deepcopyArray1d(this.forcedRegionSizes);
-            let sizeLeft = this.cellCount - RegionCreator.utilsArrayGetSum(this.baseRegionSizes);
+            this.baseRegionSizes = RegionCreatorUtils.arrayDeepcopy(this.forcedRegionSizes);
+            let sizeLeft = this.cellCount - RegionCreatorUtils.arrayGetSum(this.baseRegionSizes);
             while (sizeLeft > 0 && !tryAgain) {
                 let isSmaller = Math.random() < this.smallerRegionChance;
                 let leeway = isSmaller ? this.avgRegionSize - this.minRegionSize + 1 : this.maxRegionSize - this.avgRegionSize + 1;
@@ -119,11 +119,17 @@ class RegionCreator {
                 neighbors.push(cellNeighbors);
             }
         }
-        return  neighbors;
+        return neighbors;
     }
 
-    public setRegionConditions(strictness: number|null, smallerRegionChance: number|null,
-                               includeAvgRegionSize: boolean|null, avgRegionSize: number|null, minRegionSize: number|null, maxRegionSize: number|null): void {
+    public setRegionConditions(
+        strictness: number|null = null,
+        smallerRegionChance: number|null = null,
+        includeAvgRegionSize: boolean|null = null,
+        avgRegionSize: number|null = null,
+        minRegionSize: number|null = null,
+        maxRegionSize: number|null = null
+    ): void {
         this.strictness = strictness === null ? 0 : strictness;
         this.smallerRegionChance = smallerRegionChance === null ? 0.2 : smallerRegionChance;
         this.includeAvgRegionSize = includeAvgRegionSize === null ? true : includeAvgRegionSize;
@@ -157,7 +163,7 @@ class RegionCreator {
         if (forcedRegionSizes === null) {
             this.forcedRegionSizes = [];
         } else {
-            this.forcedRegionSizes = forcedRegionSizes;
+            this.forcedRegionSizes = RegionCreatorUtils.arrayDeepcopy(forcedRegionSizes);
         }
         return;
     }
@@ -166,7 +172,7 @@ class RegionCreator {
         this.setBaseRegionSizes();
         this.baseRegionSizes = this.baseRegionSizes.sort((a: number, b: number) => { return a - b; });
         this.baseRegionCount = this.baseRegionSizes.length;
-        this.newRegionIds = RegionCreator.utilsArrayCreateIncremented(this.forcedRegionsCount, this.baseRegionCount + this.forcedRegionsCount);
+        this.newRegionIds = RegionCreatorUtils.arrayCreateIncremented(this.forcedRegionsCount, this.baseRegionCount + this.forcedRegionsCount);
         return;
     }
 
@@ -200,7 +206,7 @@ class RegionCreator {
             }
         }
 
-        this.baseFieldForCell = ArrayUtils.createArray1d(this.totalCellCount, -1);
+        this.baseFieldForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
         this.baseCellsForFields = [];
         let nextField: number[];
         let cellsToCheck: number[];
@@ -213,7 +219,7 @@ class RegionCreator {
             while (cellsToCheck.length > 0) {
                 // @ts-ignore
                 cellId = cellsToCheck.pop();
-                leftCells = RegionCreator.utilsArrayRemoveOne(leftCells, cellId);
+                leftCells = RegionCreatorUtils.arrayRemoveOne(leftCells, cellId);
                 nextField.push(cellId);
                 for (let i = 0; i < this.baseNeighbors[cellId].length; i++) {
                     neighborId = this.baseNeighbors[cellId][i];
@@ -244,7 +250,7 @@ class RegionCreator {
         this.baseNeighbors = RegionCreator.getBaseNeighbors(this.width, this.height, this.forcedRegions);
 
         // set this.baseRegionForCell
-        this.baseRegionForCell = ArrayUtils.deepcopyArray1d(this.forcedRegions);
+        this.baseRegionForCell = RegionCreatorUtils.arrayDeepcopy(this.forcedRegions);
 
         // set this.baseFieldForCell
         // set this.baseCellsForFields
@@ -278,7 +284,7 @@ class RegionCreator {
             this.placeNextRegion();
             // this.print();
         }
-        this.board = ArrayUtils.deepcopyArray1d(this.regionForCell);
+        this.board = RegionCreatorUtils.arrayDeepcopy(this.regionForCell);
 
         let now = (new Date()).getTime();
         console.log(`${(now - then) / 1000}s`);
@@ -286,13 +292,13 @@ class RegionCreator {
     }
 
     private copyBaseValues(): void {
-        this.board = ArrayUtils.deepcopyArray1d(this.baseRegionForCell);
-        this.regionSizes = ArrayUtils.deepcopyArray1d(this.baseRegionSizes);
+        this.board = RegionCreatorUtils.arrayDeepcopy(this.baseRegionForCell);
+        this.regionSizes = RegionCreatorUtils.arrayDeepcopy(this.baseRegionSizes);
         this.regionCount = this.baseRegionCount;
-        this.freeNeighbors = ArrayUtils.deepcopyArray2d(this.baseNeighbors);
-        this.regionForCell = ArrayUtils.deepcopyArray1d(this.baseRegionForCell);
-        this.fieldForCell = ArrayUtils.deepcopyArray1d(this.baseFieldForCell);
-        this.cellsForFields = ArrayUtils.deepcopyArray2d(this.baseCellsForFields);
+        this.freeNeighbors = RegionCreatorUtils.arrayDeepcopy(this.baseNeighbors);
+        this.regionForCell = RegionCreatorUtils.arrayDeepcopy(this.baseRegionForCell);
+        this.fieldForCell = RegionCreatorUtils.arrayDeepcopy(this.baseFieldForCell);
+        this.cellsForFields = RegionCreatorUtils.arrayDeepcopy(this.baseCellsForFields);
     }
 
     // PLACE NEXT REGION
@@ -417,13 +423,13 @@ class RegionCreator {
             }
             starterCells = [];
             for (let i = 0; i < neighborCountForCell.length; i++) {
-                ArrayUtils.shuffle(neighborCountForCell[i]);
+                RegionCreatorUtils.arrayShuffle(neighborCountForCell[i]);
                 for (let j = 0; j < neighborCountForCell[i].length; j++) {
                     starterCells.push(neighborCountForCell[i][j]);
                 }
             }
         } else {
-            ArrayUtils.shuffle(starterCells);
+            RegionCreatorUtils.arrayShuffle(starterCells);
         }
         return starterCells;
     }
@@ -434,15 +440,15 @@ class RegionCreator {
         this.fieldForCell[cellId] = -1;
         let cellNeighbors = this.freeNeighbors[cellId];
         for (let i = 0; i < cellNeighbors.length; i++) {
-            this.freeNeighbors[cellNeighbors[i]] = RegionCreator.utilsArrayRemoveOne(this.freeNeighbors[cellNeighbors[i]], cellId);
+            this.freeNeighbors[cellNeighbors[i]] = RegionCreatorUtils.arrayRemoveOne(this.freeNeighbors[cellNeighbors[i]], cellId);
         }
-        this.cellsForFields[prevFieldId] = RegionCreator.utilsArrayRemoveOne(this.cellsForFields[prevFieldId], cellId);
+        this.cellsForFields[prevFieldId] = RegionCreatorUtils.arrayRemoveOne(this.cellsForFields[prevFieldId], cellId);
         return prevFieldId;
     }
 
     private addNewNeighbors(regionSize: number, cellsLeftToPlace: number, prevFieldId: number, cellId: number): number[] {
         if (regionSize !== cellsLeftToPlace) {
-            this.neighboringCells = RegionCreator.utilsArrayRemoveOne(this.neighboringCells, cellId);
+            this.neighboringCells = RegionCreatorUtils.arrayRemoveOne(this.neighboringCells, cellId);
         } else {
             this.neighboringFields.push(prevFieldId)
         }
@@ -474,7 +480,7 @@ class RegionCreator {
                     for (let j = 0; j < neighborsForField.length; j++) {
                         let neighbor = neighborsForField[j];
                         this.fieldForCell[neighbor] = fieldId;
-                        this.cellsForFields[prevFieldId] = RegionCreator.utilsArrayRemoveOne(this.cellsForFields[prevFieldId], neighbor);
+                        this.cellsForFields[prevFieldId] = RegionCreatorUtils.arrayRemoveOne(this.cellsForFields[prevFieldId], neighbor);
                         addedFieldCells.push(neighbor);
                     }
                     this.cellsForFields.push(addedFieldCells);
@@ -486,7 +492,7 @@ class RegionCreator {
     }
 
     private getFieldsForCells(cellId: number): number[][] {
-        let toCheck = ArrayUtils.deepcopyArray1d(this.freeNeighbors[cellId]);
+        let toCheck = RegionCreatorUtils.arrayDeepcopy(this.freeNeighbors[cellId]);
         let fields: number[][];
         fields = [];
         let currField: number[];
@@ -514,7 +520,7 @@ class RegionCreator {
                 }
             }
             if (toCheck.indexOf(neighborToCheck) >= 0) {
-                toCheck = RegionCreator.utilsArrayRemoveOne(toCheck, neighborToCheck);
+                toCheck = RegionCreatorUtils.arrayRemoveOne(toCheck, neighborToCheck);
             }
             currField.push(neighborToCheck);
             neighborsInCurrentField.shift();
@@ -525,7 +531,7 @@ class RegionCreator {
     private undoSeparateFields(addedFields: number[], prevFieldId: number): void {
         for (let i = 0; i < addedFields.length; i++) {
             let fieldId = addedFields[i];
-            this.neighboringFields = RegionCreator.utilsArrayRemoveOne(this.neighboringFields, fieldId);
+            this.neighboringFields = RegionCreatorUtils.arrayRemoveOne(this.neighboringFields, fieldId);
             for (let j = 0; j < this.cellsForFields[fieldId].length; j++) {
                 let cellId = this.cellsForFields[fieldId][j];
                 this.fieldForCell[cellId] = prevFieldId;
@@ -543,10 +549,10 @@ class RegionCreator {
             this.neighboringCells.push(cellId);
         }
         for (let i = 0; i < addedNeighbors.length; i++) {
-            this.neighboringCells = RegionCreator.utilsArrayRemoveOne(this.neighboringCells, addedNeighbors[i]);
+            this.neighboringCells = RegionCreatorUtils.arrayRemoveOne(this.neighboringCells, addedNeighbors[i]);
         }
         if (regionSize === cellsLeftToPlace) {
-            this.neighboringFields = RegionCreator.utilsArrayRemoveOne(this.neighboringFields, prevFieldId);
+            this.neighboringFields = RegionCreatorUtils.arrayRemoveOne(this.neighboringFields, prevFieldId);
         }
         return;
     }
@@ -574,7 +580,7 @@ class RegionCreator {
             for (let i = 0; i < this.regionSizes.length; i++) {
                 sizesToPack.push(this.regionSizes[i]);
             }
-            let optionalFields = ArrayUtils.deepcopyArray1d(this.neighboringFields);
+            let optionalFields = RegionCreatorUtils.arrayDeepcopy(this.neighboringFields);
             isPackable = RegionCreator.getIsPackable(fieldSizes, sizesToPack, optionalFields);
         }
         return isPackable;
@@ -596,7 +602,7 @@ class RegionCreator {
         if (sizesToPack.length === 0) {
             if (necessaryFields.length === 0) {
                 return true;
-            } else if (this.utilsArrayGetSumOnElements(fieldSizes, necessaryFields) === 0) {
+            } else if (RegionCreatorUtils.arrayGetSumOnElements(fieldSizes, necessaryFields) === 0) {
                 return true;
             } else {
                 return false;
@@ -644,9 +650,11 @@ class RegionCreator {
         return false;
     }
 
-    private static nextFieldSize(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-                                 optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
-                                 necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number): boolean {
+    private static nextFieldSize(
+        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
+        optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
+        necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number
+    ): boolean {
         if (necDepth === necFitSizes.length) {
             return this.optPackNext(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit);
         }
@@ -674,10 +682,12 @@ class RegionCreator {
         return false;
     }
 
-    private static nextFieldSizePossibility(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-                                            optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
-                                            necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number,
-                                            useInField: number, prevUse: number, useLeft: number, depthTwo: number): boolean {
+    private static nextFieldSizePossibility(
+        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
+        optionalFields: number[], size: number, optToFit: number, necFitSizes: number[],
+        necDepth: number, necFitFields: number[][], necLeftTotal: number, necLeftToUse: number,
+        useInField: number, prevUse: number, useLeft: number, depthTwo: number
+    ): boolean {
         if (useLeft === 0) {
             return RegionCreator.nextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optToFit, necFitSizes, necDepth + 1, necFitFields, necLeftTotal, necLeftToUse);
         }
@@ -705,8 +715,10 @@ class RegionCreator {
 
     // PACK OPTIONAL
 
-    private static optPackNext(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-                               optionalFields: number[], size: number, optToFit: number): boolean {
+    private static optPackNext(
+        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
+        optionalFields: number[], size: number, optToFit: number
+    ): boolean {
         let values = this.getFittableFields(fieldSizes, optionalFields, size);
         let optFitSizes = values[0];  // optional fittable sizes
         let optFitFields = values[1];  // optional fittable fields
@@ -716,9 +728,11 @@ class RegionCreator {
         return RegionCreator.optNextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, depth, optFitFields, optFieldSpace, optToFit);
     }
 
-    private static optNextFieldSize(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-                                    optionalFields: number[], size: number, optFitSizes: number[], optDepth: number,
-                                    optFitFields: number[][], optLeftTotal: number, optLeftToUse: number): boolean {
+    private static optNextFieldSize(
+        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
+        optionalFields: number[], size: number, optFitSizes: number[], optDepth: number,
+        optFitFields: number[][], optLeftTotal: number, optLeftToUse: number
+    ): boolean {
         if (optDepth === optFitSizes.length) {
             return this.packNext(fieldSizes, sizesToPack, necessaryFields, optionalFields);
         }
@@ -746,10 +760,12 @@ class RegionCreator {
         return false;
     }
 
-    private static optNextFieldSizePossibility(fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
-                                               optionalFields: number[], size: number, optFitSizes: number[],
-                                               optDepth: number, optFitFields: number[][], optLeftTotal: number, optLeftToUse: number,
-                                               useInField: number, prevUse: number, useLeft: number, depthTwo: number): boolean {
+    private static optNextFieldSizePossibility(
+        fieldSizes: number[], sizesToPack: number[], necessaryFields: number[],
+        optionalFields: number[], size: number, optFitSizes: number[],
+        optDepth: number, optFitFields: number[][], optLeftTotal: number, optLeftToUse: number,
+        useInField: number, prevUse: number, useLeft: number, depthTwo: number
+    ): boolean {
         if (useLeft === 0) {
             return RegionCreator.optNextFieldSize(fieldSizes, sizesToPack, necessaryFields, optionalFields, size, optFitSizes, optDepth + 1, optFitFields, optLeftTotal, optLeftToUse);
         }
@@ -797,36 +813,6 @@ class RegionCreator {
         }
 
         return [fittableSizes, fittableFields, fieldSpace]
-    }
-
-    // UTILS
-
-    private static utilsArrayRemoveOne(array: number[], toRemove: number): number[] {
-        return array.filter(function(e) { return e !== toRemove });
-    }
-
-    private static utilsArrayGetSumOnElements(array: number[], elements: number[]): number {
-        let sum = 0;
-        for (let i = 0; i < elements.length; i++) {
-            sum += array[elements[i]];
-        }
-        return sum;
-    }
-
-    private static utilsArrayGetSum(array: number[]): number {
-        let sum = 0;
-        for (let i = 0; i < array.length; i++) {
-            sum += array[i];
-        }
-        return sum;
-    }
-
-    private static utilsArrayCreateIncremented(startValue: number, conditionValue: number): number[] {
-        let array = [];
-        for (let i = startValue; i < conditionValue; i++) {
-            array.push(i);
-        }
-        return array;
     }
 
     // private print(): void {
