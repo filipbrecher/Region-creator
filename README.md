@@ -127,7 +127,7 @@ This method generates the board / regions:
 
     regionCreator.createNewBoard();
 
-You can then access the regions or the board. They both give you a copies.
+You can then access the regions or the board. They both give you copies.
 
 By accessing the regions, you will
 get an array of the individual regions. Each region will be an array of the cellIds
