@@ -144,8 +144,7 @@ class RegionCreator {
 
     private static getBaseNeighborsByWidth(originalCellIds: number[], masterWidth: number): number[][] {
         // originalCellIds must be sorted and there must be no duplicates
-        let spacings = [masterWidth * -1, 1, masterWidth, -1]; // up, right, down, left
-        let signs = [-1, 1, 1, -1];
+        let spacings = [1, masterWidth]; // right, down
         let neighbors: number[][] = [];
         for (let i = 0; i < originalCellIds.length; i++) {
             neighbors.push([]);
@@ -153,17 +152,11 @@ class RegionCreator {
 
         for (let i = 0; i < originalCellIds.length; i++) {
             let originalIndex = originalCellIds[i];
-            let yParity = Math.floor(originalIndex / masterWidth) % 2;
-            if ((originalIndex + ((masterWidth + 1) % 2) * yParity) % 2 === 0) {
-                continue;
-            }
-            for (let j = 0; j < 4; j++) { // for each direction
-                if (j === 1 && (originalIndex % masterWidth === masterWidth - 1 || originalIndex % masterWidth === -1)) {
-                    continue;
-                } else if (j === 3 && originalIndex % masterWidth === 0) {
+            for (let j = 0; j < 2; j++) { // for each half-direction
+                if (j === 0 && (originalIndex % masterWidth === masterWidth - 1 || originalIndex % masterWidth === -1)) {
                     continue;
                 }
-                for (let k = i + signs[j]; k * signs[j] <= (i + spacings[j]) * signs[j]; k += signs[j]) {
+                for (let k = i + 1; k <= i + spacings[j]; k++) {
                     if (k < 0 || k > originalCellIds.length) {
                         break;
                     }
