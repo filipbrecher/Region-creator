@@ -1,5 +1,7 @@
 # Region-creator
 
+This project is licensed under the terms of the Creative Commons Zero v1.0 Universal license
+
 ## Description
 
 This repository contains two files. regionCreator.ts and regionCreatorUtils.ts
