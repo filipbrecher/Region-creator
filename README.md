@@ -1,10 +1,10 @@
 # Region-creator
 
-This project is licensed under the terms of the Creative Commons Zero v1.0 Universal license
+This project is licensed under the terms of the Creative Commons Zero v1.0 Universal license.
 
 ## Description
 
-This repository contains two files. regionCreator.ts and regionCreatorUtils.ts
+To run the program, you need the following files: regionCreator.ts and regionCreatorUtils.ts.
 
 To run this program, you need to create a new RegionCreator object first.
 You can then customize the object's region generation to your likings.
