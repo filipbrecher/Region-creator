@@ -2,28 +2,36 @@ class RegionCreator {
 
     // TODO - make it work with custom inputs (so far works only with rectangular sudoku inputs)
 
-    private readonly width: number;
-    private readonly height: number;
-    private readonly totalCellCount: number;
+    private readonly masterWidth: number | null = null;
+    private readonly givenPairs: [number, number][] | null = null;
+    private readonly originalCellIds: number[]; // id encoding
     private cellCount: number;
-
-    public forcedRegions: number[];  // zeros are blank spaces (easier to write than -1), other numbers are region numbers
-    public forcedRegionsCount: number;  // so that we know from which ids we start adding new random regions
-    private forcedCellCount: number;  // how many cells are in total being added via forcedRegions
-    // forced regions don't count towards anything, (not cellCount, but they count towards totalCellCount)
-    public forcedRegionSizes: number[] = [];  // region sizes that must be present
-    public baseRegionSizes: number[] = [1];
-    public baseRegionCount: number = 1;
-    public doSpaghetti: boolean = false;  // true if we want to maximize circumference/area of a region
 
     // each cell is numbered from 0 to size-1
     private baseNeighbors: number[][];  // at nth position are the nth cell's neighbors
-    private baseRegionForCell: number[];  // at nth position is the region number the cell n is in
     private baseFieldForCell: number[];  // at nth position is the field number the cell n is in
     private baseCellsForFields: number[][];  // at kth position are stored the cells' numbers that are in the kth field
-    private newRegionIds: number[] = [0];  // ids that the new regions should have (ensures we don't get the same numbers if forced regions are set)
-    public board: number[] = [];
+    private _board: number[] = [];
+    public get board(): number[] {
+        return RegionCreatorUtils.arrayDeepcopy(this._board);
+    }
+    private _regions: number[][] = [];
+    public get regions(): number[][] {
+        return RegionCreatorUtils.arrayDeepcopy(this._regions);
+    }
 
+    // region sizes and shapes
+    private _forcedRegionSizes: number[] = [];  // region sizes that must be present
+    public set forcedRegionSizes(sizes: number[] | null) {
+        this._forcedRegionSizes = sizes === null ? [] : RegionCreatorUtils.arrayDeepcopy(sizes);
+    }
+    private baseRegionSizes: number[] = [1];
+    private baseRegionCount: number = 1;
+    private _spaghetti: boolean = false;  // true if we want to maximize the circumference/spreading of a region
+    public set spaghetti(value: boolean) { this._spaghetti = value; }
+    public get spaghetti(): boolean { return this._spaghetti; }
+
+    // region conditions
     private strictness: number = 0;  // how much do the random sizes not deviate from width and/or height - 0(max) to 1(min deviation)
     private smallerRegionChance: number = 0.5;  // desired percentage of regions smaller than the avgRegionSize, must be between 0 and 1
     private includeAvgRegionSize: boolean = true;  // if false, then avgRegionSize must not be equal to min and max RegionSize
@@ -41,86 +49,136 @@ class RegionCreator {
     private cellsForFields: number[][] = [[]];
     private neighboringCells: number[] = [];
     private neighboringFields: number[] = [];
-    private neighborsToExlude: number[] = [];  // save neighbor cells which weren't possible for parenthetical cells bcs they aren't possible even for the childrens
+    private neighborsToExclude: number[] = [];  // save neighbor cells which weren't possible for parenthetical cells bcs they aren't possible even for the children's
 
-    constructor(height: number, width: number) {
-        this.width = width;
-        this.height = height;
-        this.totalCellCount = this.width * this.height;
-        this.forcedRegions = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
-        this.forcedRegionsCount = 0;
-        this.forcedCellCount = 0;
-        this.cellCount = this.totalCellCount - this.forcedCellCount;
-        this.baseNeighbors = RegionCreator.getBaseNeighbors(this.width, this.height, this.forcedRegions);
-        this.baseRegionForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
-        this.baseFieldForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, 0);  // all cells are at the start in the field 0
-        this.baseCellsForFields = [RegionCreatorUtils.arrayCreateIncremented(0, this.totalCellCount)];
+    // input - the numbers in neighborPairs must be given in the range of originalCellIds or cellCount, otherwise they won't be taken in account
+    //         cellCount: number (starting from 0), masterWidth: number ||
+    //         originalCellIds: number[], masterWidth: number ||
+    //         originalCellIds: number[], neighborPairs: [number, number][]
+    //         cellCount: number (starting from 0), neighborPairs: [number, number][]
+    constructor(cellIdentifier: number[] | number, pairIdentifier: number | [number, number][]) {
+        if (typeof cellIdentifier === "number") {
+            if (cellIdentifier < 1) {
+                throw "OutOfRangeValue: cellIdentifier - cellCount can't be of a value smaller than 1";
+            }
+            this.originalCellIds = RegionCreatorUtils.createArrayIncremented(0, cellIdentifier);
+            this.cellCount = this.originalCellIds.length;
+        } else {
+            this.originalCellIds = RegionCreatorUtils.arrayDeepcopy(cellIdentifier).sort((a: number, b: number) => { return a - b; });
+            this.cellCount = this.originalCellIds.length;
+        }
+        if (typeof pairIdentifier === "number") {
+            if (pairIdentifier < 1) {
+                throw "OutOfRangeValue: pairIdentifier - masterWidth can't be of a value smaller than 1";
+            }
+            this.masterWidth = pairIdentifier;
+        } else {
+            this.givenPairs = RegionCreatorUtils.arrayDeepcopy(pairIdentifier);
+        }
+
+        if (this.masterWidth !== null) {
+            this.baseNeighbors = RegionCreator.getBaseNeighborsByWidth(this.originalCellIds, this.masterWidth);
+        } else {
+            this.baseNeighbors = RegionCreator.getBaseNeighborsByPairs(this.originalCellIds, this.givenPairs!);
+        }
+
+        [this.baseFieldForCell, this.baseCellsForFields] = RegionCreator.getBaseFields(this.baseNeighbors);
     }
 
-    private setBaseRegionSizes(): void {
-        let tryAgain = true;
-        while (tryAgain) {
-            tryAgain = false;
-            this.baseRegionSizes = RegionCreatorUtils.arrayDeepcopy(this.forcedRegionSizes);
-            let sizeLeft = this.cellCount - RegionCreatorUtils.arrayGetSum(this.baseRegionSizes);
-            while (sizeLeft > 0 && !tryAgain) {
-                let isSmaller = Math.random() < this.smallerRegionChance;
-                let leeway = isSmaller ? this.avgRegionSize - this.minRegionSize + 1 : this.maxRegionSize - this.avgRegionSize + 1;
-                if (!this.includeAvgRegionSize) {
-                    leeway -= 1;
-                }
-                let relativeDeviation = Math.random();
-                if (this.strictness < 1) {
-                    relativeDeviation **= 1 / (1 - this.strictness);
-                } else {
-                    relativeDeviation = 0;
-                }
-                let deviation = Math.floor(relativeDeviation * leeway);
-                if (!this.includeAvgRegionSize) {
-                    deviation += 1;
-                }
-                deviation = isSmaller ? -1 * deviation : deviation;
-                let newSize = this.avgRegionSize + deviation;
-                if (newSize > sizeLeft) {  // make a better way to deal with it, bcs then a region of not very possible sizes bcs of strictness
-                    newSize = sizeLeft;
-                    if (newSize < this.minRegionSize || (newSize === this.avgRegionSize && !this.includeAvgRegionSize)) {
-                        tryAgain = true;
+    private static getBaseFields(baseNeighbors: number[][]): [number[], number[][]] {
+        let cellCount = baseNeighbors.length;
+        let leftCells = RegionCreatorUtils.createArrayIncremented(0, cellCount);
+
+        let baseFieldForCell = RegionCreatorUtils.createArray1d(cellCount, -1);
+        let baseCellsForFields = [];
+
+        let nextField: number[];
+        let cellsToCheck: number[];
+        let cellId: number;
+        let neighborId: number;
+        while (leftCells.length > 0) {
+            nextField = [];
+            cellsToCheck = [leftCells.pop()!];
+            while (cellsToCheck.length > 0) {
+                cellId = cellsToCheck.pop()!;
+                leftCells = RegionCreatorUtils.arrayRemoveOne(leftCells, cellId);
+                nextField.push(cellId);
+                for (let i = 0; i < baseNeighbors[cellId].length; i++) {
+                    neighborId = baseNeighbors[cellId][i];
+                    if (nextField.indexOf(neighborId) === -1 && cellsToCheck.indexOf(neighborId) === -1) {
+                        cellsToCheck.push(neighborId);
                     }
-                } else if (sizeLeft - newSize < this.minRegionSize && sizeLeft < this.maxRegionSize) {
-                    newSize = sizeLeft;
                 }
-                sizeLeft -= newSize;
-                this.baseRegionSizes.push(newSize);
+            }
+
+            for (let i = 0; i < nextField.length; i++) {
+                baseFieldForCell[nextField[i]] = baseCellsForFields.length;
+            }
+            baseCellsForFields.push(nextField);
+        }
+
+        return [baseFieldForCell, baseCellsForFields];
+    }
+
+    private static getBaseNeighborsByPairs(originalCellIds: number[], pairs: [number, number][]): number[][] {
+        let neighbors: number[][] = [];
+        for (let i = 0; i < originalCellIds.length; i++) {
+            neighbors.push([]);
+        }
+
+        for (let i = 0; i < pairs.length; i++) {
+            let newIdFirst = originalCellIds.indexOf(pairs[i][0]);
+            let newIdSecond = originalCellIds.indexOf(pairs[i][1]);
+            if (newIdFirst === -1 || newIdSecond === -1 || newIdFirst === newIdSecond) {
+                continue;
+            }
+
+            if (neighbors[newIdFirst].indexOf(newIdSecond) === -1) {
+                neighbors[newIdFirst].push(newIdSecond);
+                neighbors[newIdSecond].push(newIdFirst);
             }
         }
-        return;
+
+        return neighbors;
     }
 
-    private static getBaseNeighbors(width: number, height: number, forcedRegions: number[]): number[][] {
-        let neighbors = [];
-        let neighborDirection = [[-1, 0], [0, -1], [1, 0], [0, 1]];
-        let cellNeighbors = [];
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                cellNeighbors = [];
-                if (forcedRegions[y * width + x] === -1) {  // if the cell itself is not in forcedRegions
-                    for (let i = 0; i < 4; i++) {
-                        let newY = y + neighborDirection[i][0];
-                        let newX = x + neighborDirection[i][1];
-                        if (newY < 0 || newY >= height || newX < 0 || newX >= width) {
-                            continue;
-                        }
-                        let newPos = newY * width + newX
-                        if (forcedRegions[newPos] === -1) {  // if the neighbor cell is not in forcedRegions
-                            cellNeighbors.push(newPos);
-                        }
+    private static getBaseNeighborsByWidth(originalCellIds: number[], masterWidth: number): number[][] {
+        // originalCellIds must be sorted and there must be no duplicates
+        let spacings = [masterWidth * -1, 1, masterWidth, -1]; // up, right, down, left
+        let signs = [-1, 1, 1, -1];
+        let neighbors: number[][] = [];
+        for (let i = 0; i < originalCellIds.length; i++) {
+            neighbors.push([]);
+        }
+
+        for (let i = 0; i < originalCellIds.length; i++) {
+            let originalIndex = originalCellIds[i];
+            let yParity = Math.floor(originalIndex / masterWidth) % 2;
+            if ((originalIndex + ((masterWidth + 1) % 2) * yParity) % 2 === 0) {
+                continue;
+            }
+            for (let j = 0; j < 4; j++) { // for each direction
+                if (j === 1 && (originalIndex % masterWidth === masterWidth - 1 || originalIndex % masterWidth === -1)) {
+                    continue;
+                } else if (j === 3 && originalIndex % masterWidth === 0) {
+                    continue;
+                }
+                for (let k = i + signs[j]; k * signs[j] <= (i + spacings[j]) * signs[j]; k += signs[j]) {
+                    if (k < 0 || k > originalCellIds.length) {
+                        break;
+                    }
+                    if (originalCellIds[k] - originalCellIds[i] === spacings[j]) {
+                        neighbors[i].push(k);
+                        neighbors[k].push(i);
+                        break;
                     }
                 }
-                neighbors.push(cellNeighbors);
             }
         }
         return neighbors;
     }
+
+    // REGION SIZES AND SHAPES
 
     public setRegionConditions(
         strictness: number|null = null,
@@ -156,14 +214,47 @@ class RegionCreator {
         if (this.avgRegionSize < this.minRegionSize || this.avgRegionSize > this.maxRegionSize) {
             this.avgRegionSize = Math.floor((this.minRegionSize + this.maxRegionSize)/2);
         }
+        if ( !this.includeAvgRegionSize && (this.minRegionSize === this.avgRegionSize || this.maxRegionSize === this.avgRegionSize)) {
+            throw "UnexpectedValue: If you don't want to include avgRegionSize, you can't have the minRegionSize or the maxRegionSize equal its value.";
+        }
         return;
     }
 
-    public setForcedRegionSizes(forcedRegionSizes: number[]|null,): void {
-        if (forcedRegionSizes === null) {
-            this.forcedRegionSizes = [];
-        } else {
-            this.forcedRegionSizes = RegionCreatorUtils.arrayDeepcopy(forcedRegionSizes);
+    private setBaseRegionSizes(): void {
+        let tryAgain = true;
+        while (tryAgain) {
+            tryAgain = false;
+            this.baseRegionSizes = RegionCreatorUtils.arrayDeepcopy(this._forcedRegionSizes);
+            let sizeLeft = this.cellCount - RegionCreatorUtils.arrayGetSum(this.baseRegionSizes);
+            while (sizeLeft > 0 && !tryAgain) {
+                let isSmaller = Math.random() < this.smallerRegionChance;
+                let leeway = isSmaller ? this.avgRegionSize - this.minRegionSize + 1 : this.maxRegionSize - this.avgRegionSize + 1;
+                if (!this.includeAvgRegionSize) {
+                    leeway -= 1;
+                }
+                let relativeDeviation = Math.random();
+                if (this.strictness < 1) {
+                    relativeDeviation **= 1 / (1 - this.strictness);
+                } else {
+                    relativeDeviation = 0;
+                }
+                let deviation = Math.floor(relativeDeviation * leeway);
+                if (!this.includeAvgRegionSize) {
+                    deviation += 1;
+                }
+                deviation = isSmaller ? -1 * deviation : deviation;
+                let newSize = this.avgRegionSize + deviation;
+                if (newSize > sizeLeft) {  // make a better way to deal with it, bcs then a region of not very possible sizes bcs of strictness
+                    newSize = sizeLeft;
+                    if (newSize < this.minRegionSize || (newSize === this.avgRegionSize && !this.includeAvgRegionSize)) {
+                        tryAgain = true;
+                    }
+                } else if (sizeLeft - newSize < this.minRegionSize && sizeLeft < this.maxRegionSize) {
+                    newSize = sizeLeft;
+                }
+                sizeLeft -= newSize;
+                this.baseRegionSizes.push(newSize);
+            }
         }
         return;
     }
@@ -172,103 +263,7 @@ class RegionCreator {
         this.setBaseRegionSizes();
         this.baseRegionSizes = this.baseRegionSizes.sort((a: number, b: number) => { return a - b; });
         this.baseRegionCount = this.baseRegionSizes.length;
-        this.newRegionIds = RegionCreatorUtils.arrayCreateIncremented(this.forcedRegionsCount, this.baseRegionCount + this.forcedRegionsCount);
-        return;
-    }
-
-    private reindexForcedRegions(forcedRegions: number[]): void {
-        let oldForNew: number[];
-        oldForNew = [];
-        oldForNew.push(0);
-        for (let i = 0; i < forcedRegions.length; i++) {
-            let regionNum = forcedRegions[i];
-            if (oldForNew.indexOf(regionNum) === -1) {
-                oldForNew.push(regionNum)
-            }
-        }
-        this.forcedCellCount = 0;
-        for (let i = 0; i < this.totalCellCount; i++) {
-            let newValue = oldForNew.indexOf(forcedRegions[i]) - 1
-            this.forcedRegions[i] = newValue;
-            if (newValue != -1) {
-                this.forcedCellCount += 1
-            }
-        }
-        this.forcedRegionsCount = oldForNew.length - 1;
-        return;
-    }
-
-    private assignForcedFields(): void {
-        let leftCells = [];
-        for (let i = 0; i < this.totalCellCount; i++) {
-            if (this.baseRegionForCell[i] === -1) {
-                leftCells.push(i);
-            }
-        }
-
-        this.baseFieldForCell = RegionCreatorUtils.createArray1d(this.totalCellCount, -1);
-        this.baseCellsForFields = [];
-        let nextField: number[];
-        let cellsToCheck: number[];
-        let cellId: number;
-        let neighborId: number;
-        while (leftCells.length > 0) {
-            nextField = [];
-            // @ts-ignore
-            cellsToCheck = [leftCells.pop()];
-            while (cellsToCheck.length > 0) {
-                // @ts-ignore
-                cellId = cellsToCheck.pop();
-                leftCells = RegionCreatorUtils.arrayRemoveOne(leftCells, cellId);
-                nextField.push(cellId);
-                for (let i = 0; i < this.baseNeighbors[cellId].length; i++) {
-                    neighborId = this.baseNeighbors[cellId][i];
-                    if (nextField.indexOf(neighborId) === -1 && cellsToCheck.indexOf(neighborId) === -1) {
-                        cellsToCheck.push(neighborId);
-                    }
-                }
-            }
-
-            for (let i = 0; i < nextField.length; i++) {
-                this.baseFieldForCell[nextField[i]] = this.baseCellsForFields.length;
-            }
-            this.baseCellsForFields.push(nextField);
-        }
-
-        return;
-    }
-
-    public setForcedRegions(forcedRegions: number[]): void {
-        // NOTICE: don't call this function if the forcedRegionSizes after this would exceed cellCount
-
-        // set this.forcedRegions
-        // set this.forcedRegionsCount
-        // set this.forcedCellCount
-        this.reindexForcedRegions(forcedRegions);
-
-        // set this.baseNeighbors
-        this.baseNeighbors = RegionCreator.getBaseNeighbors(this.width, this.height, this.forcedRegions);
-
-        // set this.baseRegionForCell
-        this.baseRegionForCell = RegionCreatorUtils.arrayDeepcopy(this.forcedRegions);
-
-        // set this.baseFieldForCell
-        // set this.baseCellsForFields
-        this.assignForcedFields();
-
-        // set this.cellCount
-        this.cellCount = this.totalCellCount - this.forcedCellCount;
-
-        // set this.baseRegionSizes
-        // set this.baseRegionCount
-        // set this.newRegionIds
-        this.createNewRegionSizes()
-
-        return;
-    }
-
-    public setSpaghetti(doSpaghetti: boolean): void {
-        this.doSpaghetti = doSpaghetti;
+        console.log(this.baseRegionSizes);
         return;
     }
 
@@ -276,29 +271,46 @@ class RegionCreator {
 
     public createNewBoard(): void {
         let then = (new Date()).getTime();
+        let tries = 0;
 
+        this._board = RegionCreatorUtils.createArray1d(this.cellCount, -1);
         this.doFinish = false;
         while (!this.doFinish) {
             // console.log("NEW BOARD");
+            tries += 1;
             this.copyBaseValues();
             this.placeNextRegion();
             // this.print();
         }
-        this.board = RegionCreatorUtils.arrayDeepcopy(this.regionForCell);
+        this._board = RegionCreatorUtils.arrayDeepcopy(this.regionForCell);
+        this._regions = this.getRegionsFromBoard();
 
         let now = (new Date()).getTime();
-        console.log(`${(now - then) / 1000}s`);
+        console.log(`${(now - then) / 1000}s, ${tries} tries`);
         return;
     }
 
     private copyBaseValues(): void {
-        this.board = RegionCreatorUtils.arrayDeepcopy(this.baseRegionForCell);
         this.regionSizes = RegionCreatorUtils.arrayDeepcopy(this.baseRegionSizes);
         this.regionCount = this.baseRegionCount;
         this.freeNeighbors = RegionCreatorUtils.arrayDeepcopy(this.baseNeighbors);
-        this.regionForCell = RegionCreatorUtils.arrayDeepcopy(this.baseRegionForCell);
+        this.regionForCell = RegionCreatorUtils.createArray1d(this.cellCount, -1);
         this.fieldForCell = RegionCreatorUtils.arrayDeepcopy(this.baseFieldForCell);
         this.cellsForFields = RegionCreatorUtils.arrayDeepcopy(this.baseCellsForFields);
+    }
+
+    private getRegionsFromBoard(): number[][] {
+        let regions = [];
+        for (let i = 0; i < this.regionCount; i++) {
+            let region = [];
+            for (let j = 0; j < this._board.length; j++) {
+                if (this._board[j] === i) {
+                    region.push(this.originalCellIds[j]);
+                }
+            }
+            regions.push(region);
+        }
+        return regions;
     }
 
     // PLACE NEXT REGION
@@ -316,11 +328,10 @@ class RegionCreator {
         }
 
         let currRegionSize = this.regionSizes.pop();
-        let currRegionNum = this.regionCount - this.regionSizes.length - 1
-        let currRegionId = this.newRegionIds[currRegionNum];
+        let currRegionId = this.regionCount - this.regionSizes.length - 1;
         this.neighboringFields = [];
         this.neighboringCells = [];
-        this.neighborsToExlude = [];
+        this.neighborsToExclude = [];
 
         // @ts-ignore
         let cellsPlaced = this.tryPlaceNextCell(currRegionSize, currRegionId, currRegionSize);
@@ -345,7 +356,7 @@ class RegionCreator {
         }
 
         let starterCells = this.getStarterCells(regionSize, regionId, cellsLeftToPlace);
-        let neighborsExluded = 0;
+        let neighborsExcluded = 0;
 
         for (let i = 0; i < starterCells.length; i++) {
             let cellId = starterCells[i];
@@ -374,8 +385,8 @@ class RegionCreator {
                 }
             }
 
-            this.neighborsToExlude.push(cellId);
-            neighborsExluded += 1;
+            this.neighborsToExclude.push(cellId);
+            neighborsExcluded += 1;
             // undo fields
             this.undoSeparateFields(addedFields, prevFieldId);
             // undo neighbors
@@ -383,7 +394,7 @@ class RegionCreator {
             // undo cell
             this.undoPlaceCell(cellId, prevFieldId);
         }
-        this.neighborsToExlude = this.neighborsToExlude.slice(0, neighborsExluded * -1);
+        this.neighborsToExclude = this.neighborsToExclude.slice(0, neighborsExcluded * -1);
 
         return false;
     }
@@ -402,12 +413,12 @@ class RegionCreator {
         } else {
             starterCells = [];
             for (let i = 0; i < this.neighboringCells.length; i++) {
-                if (this.neighborsToExlude.indexOf(this.neighboringCells[i]) === -1) {
+                if (this.neighborsToExclude.indexOf(this.neighboringCells[i]) === -1) {
                     starterCells.push(this.neighboringCells[i]);
                 }
             }
         }
-        if (this.doSpaghetti) {
+        if (this._spaghetti) {
             let neighborCountForCell: number[][];  // how many neighbors of a starterCell are in the current field
             neighborCountForCell = [[], [], [], [], []];
             for (let i = 0; i < starterCells.length; i++) {

@@ -8,7 +8,7 @@ class RegionCreatorUtils {
         return array;
     }
 
-    public static arrayCreateIncremented(startValue: number, conditionValue: number): number[] {
+    public static createArrayIncremented(startValue: number, conditionValue: number): number[] {
         let array = [];
         for (let i = startValue; i < conditionValue; i++) {
             array.push(i);
