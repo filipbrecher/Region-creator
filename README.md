@@ -157,3 +157,29 @@ constructor).
     regionCreator.createNewBoard();
     let board = regionCreator.board;
 
+### Managing time
+
+Sometimes the program can take a long time to create a board because it can get stuck.
+To partially prevent this, you can set the  maximum amount of time you want the program
+to try to create one board. If the program doesn't succeed to create it in that time,
+it will try to create it again. You can set the time using the variable maxOneTime.
+The time is set in seconds. This is set to 0.1 seconds by default, so if you are
+creating a large board, it is recommended to adjust the time to your needs.
+
+    regionCreator.maxOneTime = 0.1; // 0.1 seconds
+
+You can do the same with the overall time the program is creating every board. So for
+example if the program fails to create one board repeatedly, you can then stop it
+entirely. This time is also set in seconds, using the variable maxTime. It is set
+to 10 seconds by default.
+
+    regionCreator.maxTime = 2; // 2 seconds
+
+You can also enable logging using the variable doLog. This will post a message in
+the console using console.log("message"); telling you the time it took the method
+createNewBoard to execute. This will also post a message telling you the region sizes
+that got generating when calling the createNewRegionSizes method.
+
+    regionCreator.doLog = true;
+
+

@@ -1,6 +1,8 @@
 class RegionCreator {
 
-    // TODO - make it work with custom inputs (so far works only with rectangular sudoku inputs)
+    public doLog: boolean = false;
+    public maxOneTime: number = 0.1;
+    public maxTime: number = 10;
 
     private readonly masterWidth: number | null = null;
     private readonly givenPairs: [number, number][] | null = null;
@@ -11,6 +13,10 @@ class RegionCreator {
     private baseNeighbors: number[][];  // at nth position are the nth cell's neighbors
     private baseFieldForCell: number[];  // at nth position is the field number the cell n is in
     private baseCellsForFields: number[][];  // at kth position are stored the cells' numbers that are in the kth field
+    private _hasBoard: boolean = false;
+    public get hasBoard(): boolean {
+        return this._hasBoard;
+    }
     private _board: number[] = [];
     public get board(): number[] {
         return RegionCreatorUtils.arrayDeepcopy(this._board);
@@ -33,14 +39,15 @@ class RegionCreator {
 
     // region conditions
     private strictness: number = 0;  // how much do the random sizes not deviate from width and/or height - 0(max) to 1(min deviation)
-    private smallerRegionChance: number = 0.5;  // desired percentage of regions smaller than the avgRegionSize, must be between 0 and 1
+    private smallerRegionChance: number = 0.5;  // desired percentage of regionCreator smaller than the avgRegionSize, must be between 0 and 1
     private includeAvgRegionSize: boolean = true;  // if false, then avgRegionSize must not be equal to min and max RegionSize
     private avgRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be between min and max RegionSize
     private minRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be smaller or equal to maxRegionSize
     private maxRegionSize: number = 1;  // must be integer between 1 and (cellCount - sum of baseRegionSizes) (including) and must be bigger or equal to minRegionSize
 
+    private then: number = new Date().getTime();
+    private thenOne: number = new Date().getTime();
     // variables to help with the generation
-    private doFinish: boolean = false;
     private regionSizes: number[] = [];
     private regionCount: number = 1;
     private freeNeighbors: number[][] = [[]];
@@ -256,30 +263,40 @@ class RegionCreator {
         this.setBaseRegionSizes();
         this.baseRegionSizes = this.baseRegionSizes.sort((a: number, b: number) => { return a - b; });
         this.baseRegionCount = this.baseRegionSizes.length;
-        console.log(this.baseRegionSizes);
+        if (this.doLog) {
+            console.log("RegionCreator - generated region sizes:", this.baseRegionSizes);
+        }
         return;
     }
 
     // CREATE NEW BOARD
 
     public createNewBoard(): void {
-        let then = (new Date()).getTime();
+        this.then = new Date().getTime();
         let tries = 0;
 
         this._board = RegionCreatorUtils.createArray1d(this.cellCount, -1);
-        this.doFinish = false;
-        while (!this.doFinish) {
+        this._hasBoard = false;
+        while ( !this._hasBoard) {
             // console.log("NEW BOARD");
             tries += 1;
+            this.thenOne = new Date().getTime();
             this.copyBaseValues();
             this.placeNextRegion();
             // this.print();
+
+            let now = new Date().getTime();
+            if (((now - this.then) / 1000) >= this.maxTime) {
+                break;
+            }
         }
         this._board = RegionCreatorUtils.arrayDeepcopy(this.regionForCell);
         this._regions = this.getRegionsFromBoard();
 
-        let now = (new Date()).getTime();
-        console.log(`${(now - then) / 1000}s, ${tries} tries`);
+        if (this.doLog) {
+            let now = new Date().getTime();
+            console.log(`RegionCreator - ${(now - this.then) / 1000}s, ${tries} tries`);
+        }
         return;
     }
 
@@ -316,7 +333,7 @@ class RegionCreator {
         // this.print();
 
         if (this.regionSizes.length === 0) {
-            this.doFinish = true;
+            this._hasBoard = true;
             return;
         }
 
@@ -344,8 +361,14 @@ class RegionCreator {
 
     private tryPlaceNextCell(regionSize: number, regionId: number, cellsLeftToPlace: number): boolean {
         // console.log(regionSize - cellsLeftToPlace);
+
         if (cellsLeftToPlace === 0) {
             return true;
+        }
+
+        let now = new Date().getTime();
+        if ((now - this.thenOne) / 1000 >= this.maxOneTime || (now - this.then) / 1000 >= this.maxTime) {
+            return false;
         }
 
         let starterCells = this.getStarterCells(regionSize, regionId, cellsLeftToPlace);
