@@ -140,8 +140,10 @@ you specified/that got generated when you created the regionCreator object.
     regionCreator.setRegionConditions();
     regionCreator.createNewRegionSizes();
     regionCreator.createNewBoard();
-    let regions = regionCreator.regions;
-    // expected "regions" values: [[0, 4, 5], [2, 3, 6]] or [[2, 3, 6], [0, 4, 5]];
+    if (regionCreator.hasBoard) {
+      let regions = regionCreator.regions;
+      // expected "regions" values: [[0, 4, 5], [2, 3, 6]] or [[2, 3, 6], [0, 4, 5]];
+    }
 
 
 By accessing the board, you will get an array with region numbers. Each value(region number)
@@ -154,8 +156,18 @@ constructor).
     let regionCreator = new RegionCreator(81, 9);
     regionCreator.setRegionConditions(0.6, 0.3, true, 8, 6, 10);
     regionCreator.createNewRegionSizes();
+    regionCreator.createNewBoard();regionCreator.createNewBoard();
+    if (regionCreator.hasBoard) {
+      let board = regionCreator.board;
+    }
+
+If the program times out (maxTime is surpassed), it won't generate a board. So you always
+need to check if a board has been generated using the hasBoard variable.
+
     regionCreator.createNewBoard();
-    let board = regionCreator.board;
+    if (regionCreator.hasBoard) {
+      let board = regionCreator.board;
+    }
 
 ### Managing time
 
