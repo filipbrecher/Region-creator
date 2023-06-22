@@ -169,13 +169,13 @@ need to check if a board has been generated using the hasBoard variable.
       let board = regionCreator.board;
     }
 
-### Managing time
+### Managing runtime
 
 Sometimes the program can take a long time to create a board because it can get stuck.
 To partially prevent this, you can set the  maximum amount of time you want the program
 to try to create one board. If the program doesn't succeed to create it in that time,
 it will try to create it again. You can set the time using the variable maxOneTime.
-The time is set in seconds. This is set to 0.1 seconds by default, so if you are
+The time is set in seconds. This is set to 1 second by default, so if you are
 creating a large board, it is recommended to adjust the time to your needs.
 
     regionCreator.maxOneTime = 0.1; // 0.1 seconds
@@ -186,6 +186,12 @@ entirely. This time is also set in seconds, using the variable maxTime. It is se
 to 10 seconds by default.
 
     regionCreator.maxTime = 2; // 2 seconds
+
+Furthermore, you can limit the amount of times the program will try to generate a board.
+It is set to 100 tries by default. This can prevent cases where there is no solution for
+the region sizes that got generated. Use the variable maxTries to adjust this.
+
+    regionCreator.maxTries = 1000;
 
 You can also enable logging using the variable doLog. This will post a message in
 the console using console.log("message"); telling you the time it took the method

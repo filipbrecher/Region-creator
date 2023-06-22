@@ -1,8 +1,9 @@
 class RegionCreator {
 
-    public doLog: boolean = false;
-    public maxOneTime: number = 0.1;
+    public doLog: boolean = true;
+    public maxOneTime: number = 1;
     public maxTime: number = 10;
+    public maxTries: number = 100;
 
     private readonly masterWidth: number | null = null;
     private readonly givenPairs: [number, number][] | null = null;
@@ -287,6 +288,9 @@ class RegionCreator {
 
             let now = new Date().getTime();
             if (((now - this.then) / 1000) >= this.maxTime) {
+                break;
+            }
+            if (tries > this.maxTries) {
                 break;
             }
         }
