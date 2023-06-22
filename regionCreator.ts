@@ -280,7 +280,6 @@ class RegionCreator {
         this._hasBoard = false;
         while ( !this._hasBoard) {
             // console.log("NEW BOARD");
-            tries += 1;
             this.thenOne = new Date().getTime();
             this.copyBaseValues();
             this.placeNextRegion();
@@ -290,7 +289,8 @@ class RegionCreator {
             if (((now - this.then) / 1000) >= this.maxTime) {
                 break;
             }
-            if (tries > this.maxTries) {
+            tries += 1;
+            if (tries >= this.maxTries) {
                 break;
             }
         }
