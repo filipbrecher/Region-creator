@@ -36,13 +36,20 @@ class RegionCreatorUtils {
         return sum;
     }
 
-    public static arrayShuffle(array: any[]) {
+    public static arrayShuffle(array: any[]): void {
         for (let i = array.length - 1; i > 0; i--) {
             let randomNum = Math.floor(Math.random() * (i + 1));
             let temp = array[i];
             array[i] = array[randomNum];
             array[randomNum] = temp;
         }
+    }
+
+    public static arraySortNumbers(array: number[], asc: boolean): number[] {
+        array.sort(
+            (a: number, b: number) => { return asc ? a - b : b - a; }
+        );
+        return array;
     }
 
     public static arrayDeepcopy(array: any): any {

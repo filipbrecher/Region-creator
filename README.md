@@ -117,11 +117,13 @@ generate multiple boards with the same random sizes this way.
 
 ### Shape customization
 
-You can also customize which shapes are preferred by setting spaghetti.
-By setting it to "true", regions will be generated so that they have as big of a circumference as they can have.
-It is set to "false" by default.
+You can also customize which shapes are preferred by setting generation modes.
+By default, the mode is set to 'default', which doesn't prioritize any cells over other cell.
+Other modes are 'spaghetti' and 'blob'. Spaghetti generates the regions in such a way, that
+each cell of the region has the least amount of neighbors. Blob generates regions in such a way,
+that you end up with regions with clump shapes, similar to circles.
 
-    regionCreator.spaghetti = true;
+    regionCreator.mode = "spaghetti";
 
 ### Running the program
 
@@ -200,4 +202,12 @@ that got generating when calling the createNewRegionSizes method.
 
     regionCreator.doLog = true;
 
+You can also change the way the program chooses the first cell in which it starts generating
+a new region. You change this by setting the generateFaster variable. It is set to true by
+default. When the variable is set to true, the program will set the first cell of a newly
+generated region to be the cell with the smallest id, if the region creation is not successful,
+it will then find the next cell, and so on. If the variable is set to false, the program will
+choose the first cell of a new region randomly. This could alter the generation of regions and
+that is why this variable is included.
 
+    regionCreator.generateFaster = false;

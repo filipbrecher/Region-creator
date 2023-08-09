@@ -1,9 +1,35 @@
 class RegionCreator {
 
-    public doLog: boolean = true;
+    public doLog: boolean = false;
     public maxOneTime: number = 1;
     public maxTime: number = 10;
     public maxTries: number = 100;
+    public generateFaster: boolean = true; // if true, generates the first cell of each region in the spot starting from the smallest ids,
+                                     // if false, generates the first cell in a random free spot
+    public static modes: {
+        DEFAULT: (0 | 1 | 2),
+        SPAGHETTI: (0 | 1 | 2),
+        BLOB: (0 | 1 | 2),
+    } = {
+        DEFAULT: 0, // randomly choose the next cell of a region from all possible neighbors
+        SPAGHETTI: 1, // minimize cell neighbors from the same regions
+        BLOB: 2, // generate circle/clump-like regions
+    }
+    private _mode: (0 | 1 | 2) = RegionCreator.modes.DEFAULT;
+    public set mode(value: ("default" | "spaghetti" | "blob")) {
+        switch (value) {
+            case "default": this._mode = RegionCreator.modes.DEFAULT; break;
+            case "spaghetti": this._mode = RegionCreator.modes.SPAGHETTI; break;
+            case "blob": this._mode = RegionCreator.modes.BLOB; break;
+        }
+    }
+    public get mode(): ("default" | "spaghetti" | "blob") {
+        switch (this._mode) {
+            case 0: return "default";
+            case 1: return "spaghetti";
+            case 2: return "blob";
+        }
+    }
 
     private readonly masterWidth: number | null = null;
     private readonly givenPairs: [number, number][] | null = null;
@@ -34,9 +60,6 @@ class RegionCreator {
     }
     private baseRegionSizes: number[] = [1];
     private baseRegionCount: number = 1;
-    private _spaghetti: boolean = false;  // true if we want to maximize the circumference/spreading of a region
-    public set spaghetti(value: boolean) { this._spaghetti = value; }
-    public get spaghetti(): boolean { return this._spaghetti; }
 
     // region conditions
     private strictness: number = 0;  // how much do the random sizes not deviate from width and/or height - 0(max) to 1(min deviation)
@@ -262,7 +285,11 @@ class RegionCreator {
 
     public createNewRegionSizes(): void {
         this.setBaseRegionSizes();
-        this.baseRegionSizes = this.baseRegionSizes.sort((a: number, b: number) => { return a - b; });
+        if (this.generateFaster) {
+            RegionCreatorUtils.arrayShuffle(this.baseRegionSizes);
+        } else {
+            this.baseRegionSizes = RegionCreatorUtils.arraySortNumbers(this.baseRegionSizes, true);
+        }
         this.baseRegionCount = this.baseRegionSizes.length;
         if (this.doLog) {
             console.log("RegionCreator - generated region sizes:", this.baseRegionSizes);
@@ -430,6 +457,11 @@ class RegionCreator {
                     }
                 }
             }
+            if (this.generateFaster) {
+                RegionCreatorUtils.arraySortNumbers(starterCells, true);
+            } else {
+                RegionCreatorUtils.arrayShuffle(starterCells)
+            }
         } else {
             starterCells = [];
             for (let i = 0; i < this.neighboringCells.length; i++) {
@@ -437,30 +469,33 @@ class RegionCreator {
                     starterCells.push(this.neighboringCells[i]);
                 }
             }
-        }
-        if (this._spaghetti) {
-            let neighborCountForCell: number[][];  // how many neighbors of a starterCell are in the current field
-            neighborCountForCell = [[], [], [], [], []];
-            for (let i = 0; i < starterCells.length; i++) {
-                let cellId = starterCells[i];
-                let neighborCount = 0;
-                for (let j = 0; j < this.baseNeighbors[cellId].length; j++) {
-                    let neighborId = this.baseNeighbors[cellId][j];
-                    if (this.regionForCell[neighborId] === regionId) {
-                        neighborCount += 1;
+            if (this._mode === RegionCreator.modes.BLOB) {
+                if (Math.random() < 0.4) {
+                    RegionCreatorUtils.arrayShuffle(starterCells);
+                }
+            } else {
+                RegionCreatorUtils.arrayShuffle(starterCells);
+            }
+            if (this._mode === RegionCreator.modes.SPAGHETTI) {
+                let neighborCountForCell: number[][] = [[], [], [], [], []];  // how many neighbors of a starterCell are in the current field
+                for (let i = 0; i < starterCells.length; i++) {
+                    let cellId = starterCells[i];
+                    let neighborCount = 0;
+                    for (let j = 0; j < this.baseNeighbors[cellId].length; j++) {
+                        let neighborId = this.baseNeighbors[cellId][j];
+                        if (this.regionForCell[neighborId] === regionId) {
+                            neighborCount += 1;
+                        }
+                    }
+                    neighborCountForCell[neighborCount].push(cellId);
+                }
+                starterCells = [];
+                for (let i = 0; i < neighborCountForCell.length; i++) {
+                    for (let j = 0; j < neighborCountForCell[i].length; j++) {
+                        starterCells.push(neighborCountForCell[i][j]);
                     }
                 }
-                neighborCountForCell[neighborCount].push(cellId);
             }
-            starterCells = [];
-            for (let i = 0; i < neighborCountForCell.length; i++) {
-                RegionCreatorUtils.arrayShuffle(neighborCountForCell[i]);
-                for (let j = 0; j < neighborCountForCell[i].length; j++) {
-                    starterCells.push(neighborCountForCell[i][j]);
-                }
-            }
-        } else {
-            RegionCreatorUtils.arrayShuffle(starterCells);
         }
         return starterCells;
     }
