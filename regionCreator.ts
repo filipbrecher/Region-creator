@@ -6,11 +6,7 @@ class RegionCreator {
     public maxTries: number = 100;
     public generateFaster: boolean = true; // if true, generates the first cell of each region in the spot starting from the smallest ids,
                                      // if false, generates the first cell in a random free spot
-    public static modes: {
-        DEFAULT: (0 | 1 | 2),
-        SPAGHETTI: (0 | 1 | 2),
-        BLOB: (0 | 1 | 2),
-    } = {
+    public static modes: { [key: string]: (0 | 1 | 2) } = {
         DEFAULT: 0, // randomly choose the next cell of a region from all possible neighbors
         SPAGHETTI: 1, // minimize cell neighbors from the same regions
         BLOB: 2, // generate circle/clump-like regions
